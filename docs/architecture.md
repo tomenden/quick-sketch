@@ -45,6 +45,13 @@ Our app-specific code should focus on:
 - if a desired behavior requires large invasive overrides to Excalidraw internals, stop and reassess before proceeding
 - keep custom code small and explain why it exists
 
+## Current visual interpretation
+
+- follow the updated Variation A direction in `quick-sketch.pen`
+- prefer native-feeling chrome over dashboard-style UI
+- keep editor controls light and secondary to the canvas
+- use custom shell UI only where it improves the Quick Sketch workflow, not to replace Excalidraw capabilities unnecessarily
+
 ## Implementation sequence
 
 1. minimal window shell

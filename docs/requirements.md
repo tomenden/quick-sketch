@@ -45,7 +45,8 @@ The app is not trying to be a full whiteboard platform. It should feel fast, obv
 ## Visual direction
 
 - `quick-sketch.pen` is the design reference
-- the first implementation should follow the floating desktop-window direction already explored in the design file
+- the current intended direction is Variation A: minimal, calm, native
+- specifically, the shell should feel like a lightweight desktop utility with a compact title row, a restrained toolbar, and a quiet canvas-first composition
 - implementation may simplify visuals slightly, but should keep the same overall product feel: calm canvas, light chrome, clear actions, minimal distraction
 
 ## Explicit non-goals for v1
