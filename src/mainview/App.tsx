@@ -2,7 +2,14 @@ import Electrobun, { Electroview } from "electrobun/view";
 import { Excalidraw, exportToBlob } from "@excalidraw/excalidraw";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import type { ExportImageResponse, QuickSketchBootstrap, QuickSketchRPC, QuickSketchSettings, StoredScene } from "../shared/rpc.ts";
+import {
+  normalizeStoredScene,
+  type ExportImageResponse,
+  type QuickSketchBootstrap,
+  type QuickSketchRPC,
+  type QuickSketchSettings,
+  type StoredScene,
+} from "../shared/rpc.ts";
 
 type Bridge = {
   exportPng: () => Promise<ExportImageResponse>;
@@ -216,15 +223,20 @@ export function App() {
   );
 
   function persistScene(scene: StoredScene) {
-    sceneRef.current = scene;
-    setScenePresent(scene.elements.length > 0);
+    const normalizedScene = normalizeStoredScene(scene);
+    if (!normalizedScene) {
+      return;
+    }
+
+    sceneRef.current = normalizedScene;
+    setScenePresent(normalizedScene.elements.length > 0);
 
     if (persistTimerRef.current) {
       window.clearTimeout(persistTimerRef.current);
     }
 
     persistTimerRef.current = window.setTimeout(() => {
-      void electrobun.rpc.request.persistScene({ scene });
+      void electrobun.rpc.request.persistScene({ scene: normalizedScene });
     }, 180);
   }
 
@@ -384,7 +396,10 @@ export function App() {
           onChange={(elements, appState, files) => {
             persistScene({
               elements,
-              appState: appState as unknown as Record<string, unknown>,
+              appState: {
+                viewBackgroundColor: appState.viewBackgroundColor,
+                gridModeEnabled: appState.gridModeEnabled,
+              },
               files: files as unknown as Record<string, unknown>,
             });
           }}

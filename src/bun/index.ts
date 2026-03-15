@@ -1,7 +1,14 @@
 import { BrowserView, BrowserWindow, GlobalShortcut, Updater, Utils } from "electrobun/bun";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { ExportImageResponse, QuickSketchBootstrap, QuickSketchRPC, QuickSketchSettings, StoredScene } from "../shared/rpc.ts";
+import {
+  normalizeStoredScene,
+  type ExportImageResponse,
+  type QuickSketchBootstrap,
+  type QuickSketchRPC,
+  type QuickSketchSettings,
+  type StoredScene,
+} from "../shared/rpc.ts";
 
 const DEV_SERVER_PORT = 5174;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -66,7 +73,7 @@ function sceneHasContent(scene: StoredScene | null): boolean {
   return Boolean(scene && Array.isArray(scene.elements) && scene.elements.length > 0);
 }
 
-let currentScene = await readJson<StoredScene | null>(scenePath, null);
+let currentScene = normalizeStoredScene(await readJson<StoredScene | null>(scenePath, null));
 let currentSettings = normalizeSettings(await readJson(settingsPath, createDefaultSettings()));
 
 type MainWindow = BrowserWindow<QuickSketchRPC>;
@@ -85,7 +92,7 @@ const rpc = BrowserView.defineRPC<QuickSketchRPC>({
         },
       }),
       persistScene: async ({ scene }: { scene: StoredScene }) => {
-        currentScene = scene;
+        currentScene = normalizeStoredScene(scene);
         await writeJson(scenePath, currentScene);
         return { ok: true as const };
       },
