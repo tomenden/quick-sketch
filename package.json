@@ -8,6 +8,7 @@
     "dev:hmr": "concurrently \"npm run hmr\" \"npm run dev\"",
     "hmr": "vite --port 5174",
     "build": "vite build && electrobun build",
+    "package": "yarn build && bash scripts/make-dmg.sh",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
