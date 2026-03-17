@@ -3,6 +3,9 @@ import { Excalidraw, exportToBlob } from "@excalidraw/excalidraw";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import {
+  acceleratorToDisplay,
+  keyEventMatchesAccelerator,
+  keyEventToAccelerator,
   normalizeStoredScene,
   type ExportImageResponse,
   type QuickSketchBootstrap,
@@ -14,11 +17,13 @@ import {
 type Bridge = {
   exportPng: () => Promise<ExportImageResponse>;
   clearScene: () => void;
+  openSettings: () => void;
 };
 
 const bridge: Bridge = {
   exportPng: async () => ({ pngBase64: null, hasContent: false }),
   clearScene: () => undefined,
+  openSettings: () => undefined,
 };
 
 const rpc = Electroview.defineRPC<QuickSketchRPC>({
@@ -30,6 +35,9 @@ const rpc = Electroview.defineRPC<QuickSketchRPC>({
     messages: {
       clearScene: () => {
         bridge.clearScene();
+      },
+      openSettings: () => {
+        bridge.openSettings();
       },
     },
   },
@@ -129,6 +137,56 @@ function Toggle({
   );
 }
 
+function ShortcutRecorder({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (accel: string) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!recording) return;
+
+    function onKey(e: KeyboardEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      // Ignore bare modifier presses
+      if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+      const accel = keyEventToAccelerator(e);
+      if (accel) {
+        onChange(accel);
+      }
+      setRecording(false);
+    }
+
+    function onBlur() {
+      setRecording(false);
+    }
+
+    window.addEventListener("keydown", onKey, true);
+    ref.current?.addEventListener("blur", onBlur);
+    const btn = ref.current;
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      btn?.removeEventListener("blur", onBlur);
+    };
+  }, [recording, onChange]);
+
+  return (
+    <button
+      ref={ref}
+      className={recording ? "shortcut-badge recording" : "shortcut-badge"}
+      onClick={() => setRecording(true)}
+      type="button"
+    >
+      {recording ? "Press keys…" : acceleratorToDisplay(value)}
+    </button>
+  );
+}
+
 function Modal({
   title,
   children,
@@ -176,6 +234,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copying, setCopying] = useState(false);
   const [scenePresent, setScenePresent] = useState(false);
+  const [showAccessibilityWarning, setShowAccessibilityWarning] = useState(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const sceneRef = useRef<StoredScene | null>(null);
   const persistTimerRef = useRef<number | null>(null);
@@ -191,6 +250,9 @@ export function App() {
       sceneRef.current = nextBootstrap.scene;
       setScenePresent(sceneHasContent(nextBootstrap.scene));
       setBootstrap(nextBootstrap);
+      if (!nextBootstrap.shortcutsRegistered) {
+        setShowAccessibilityWarning(true);
+      }
     });
 
     return () => {
@@ -198,15 +260,35 @@ export function App() {
     };
   }, []);
 
+  // Electrobun's GlobalShortcut uses NSEvent.addGlobalMonitorForEventsMatchingMask
+  // which only fires when OTHER apps are focused. We need a local keydown listener
+  // to handle shortcuts when our own window is focused.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (keyEventMatchesAccelerator(e, shortcuts.toggleWindow)) {
+        e.preventDefault();
+        void electrobun.rpc.request.closeWindow({});
+      }
+      if (keyEventMatchesAccelerator(e, shortcuts.copyAndClose)) {
+        e.preventDefault();
+        void handleCopy(true);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  });
+
   const settings = bootstrap?.settings ?? {
-    showGrid: true,
+    showGrid: false,
     autoClearAfterCopyAndClose: true,
+    shortcuts: {
+      toggleWindow: "Control+Shift+S",
+      copyAndClose: "Control+Shift+C",
+    },
   };
 
-  const shortcuts = bootstrap?.shortcuts ?? {
-    toggleWindow: "Control+Shift+P",
-    copyAndClose: "Control+Shift+Enter",
-  };
+  const shortcuts = settings.shortcuts;
 
   const uiOptions = useMemo(
     () => ({
@@ -324,6 +406,25 @@ export function App() {
   bridge.clearScene = () => {
     apiRef.current?.resetScene();
   };
+  bridge.openSettings = () => setSettingsOpen(true);
+
+  function updateShortcut(key: "toggleWindow" | "copyAndClose", accel: string) {
+    const nextShortcuts = { ...shortcuts, [key]: accel };
+    const nextSettings = { ...settings, shortcuts: nextShortcuts };
+    updateSettings(nextSettings);
+    void electrobun.rpc.request.updateShortcuts({ shortcuts: nextShortcuts });
+  }
+
+  async function handleOpenSystemPreferences() {
+    await electrobun.rpc.request.openSystemPreferences({});
+  }
+
+  async function handleRetryShortcuts() {
+    const result = await electrobun.rpc.request.retryShortcuts({});
+    if (result?.ok) {
+      setShowAccessibilityWarning(false);
+    }
+  }
 
   if (!bootstrap) {
     return <div className="boot-screen">Loading Quick Sketch…</div>;
@@ -331,17 +432,15 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="titlebar">
-        <div className="titlebar-left">
-          <div aria-hidden="true" className="traffic-lights">
-            <span className="traffic red" />
-            <span className="traffic yellow" />
-            <span className="traffic green" />
-          </div>
-          <span className="window-title">Quick Sketch</span>
+      <div className="utility-bar">
+        <div className="shortcut-strip">
+          <span>Toggle {acceleratorToDisplay(shortcuts.toggleWindow)}</span>
+          <span>Copy {acceleratorToDisplay(shortcuts.copyAndClose)}</span>
         </div>
-
-        <div className="titlebar-actions">
+        <div className="utility-actions">
+          <button className="text-button" onClick={() => void handleCopy(false)} type="button">
+            Copy PNG
+          </button>
           <button className="ghost-button icon-only" onClick={() => setSettingsOpen(true)} type="button">
             <IconGear />
           </button>
@@ -350,19 +449,40 @@ export function App() {
             <span>{copying ? "Copying…" : "Copy & Close"}</span>
           </button>
         </div>
-      </header>
-
-      <div className="utility-bar">
-        <div className="shortcut-strip">
-          <span>Toggle {shortcuts.toggleWindow}</span>
-          <span>Copy {shortcuts.copyAndClose}</span>
-        </div>
-        <button className="text-button" onClick={() => void handleCopy(false)} type="button">
-          Copy PNG
-        </button>
       </div>
 
       <main className="canvas-shell">
+        {showAccessibilityWarning ? (
+          <div className="accessibility-warning">
+            <div className="warning-card">
+              <div className="warning-icon-circle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <h2>Accessibility Permission Required</h2>
+              <p>
+                Quick Sketch needs Accessibility permission to register global keyboard shortcuts. Without it, you won't be able to toggle the window with ⌃⇧P.
+              </p>
+              <div className="warning-buttons">
+                <button className="secondary-button" onClick={() => { void handleRetryShortcuts(); setShowAccessibilityWarning(false); }} type="button">
+                  Remind Me Later
+                </button>
+                <button className="primary-button" onClick={() => void handleOpenSystemPreferences()} type="button">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                  <span>Open System Settings</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {!scenePresent ? (
           <div className="empty-state">
             <div className="empty-icon">
@@ -370,7 +490,7 @@ export function App() {
             </div>
             <h1>Draw something quick</h1>
             <p>Sketch a diagram, copy it to clipboard, paste anywhere.</p>
-            <p>Toggle with {shortcuts.toggleWindow}</p>
+            <p>Toggle with {acceleratorToDisplay(shortcuts.toggleWindow)}</p>
             <span>Pen tool&apos;s ready — just start drawing</span>
           </div>
         ) : null}
@@ -414,11 +534,11 @@ export function App() {
             <h3>Shortcuts</h3>
             <div className="settings-row">
               <span>Toggle Window</span>
-              <code>{shortcuts.toggleWindow}</code>
+              <ShortcutRecorder value={shortcuts.toggleWindow} onChange={(v) => updateShortcut("toggleWindow", v)} />
             </div>
             <div className="settings-row">
               <span>Copy and close</span>
-              <code>{shortcuts.copyAndClose}</code>
+              <ShortcutRecorder value={shortcuts.copyAndClose} onChange={(v) => updateShortcut("copyAndClose", v)} />
             </div>
           </div>
 

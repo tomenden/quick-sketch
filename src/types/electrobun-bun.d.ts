@@ -34,5 +34,11 @@ declare module "electrobun/bun" {
     };
     clipboardWriteImage(data: Uint8Array): void;
     showNotification(input: { title: string; body?: string }): void;
+    openExternal(url: string): boolean;
+  };
+
+  export const ApplicationMenu: {
+    setApplicationMenu(menu: unknown[]): void;
+    on(event: string, handler: (event: any) => void): void;
   };
 }

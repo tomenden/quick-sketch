@@ -1,19 +1,20 @@
-import { BrowserView, BrowserWindow, GlobalShortcut, Updater, Utils } from "electrobun/bun";
+import { ApplicationMenu, BrowserView, BrowserWindow, GlobalShortcut, Updater, Utils } from "electrobun/bun";
+import { dlopen, FFIType } from "bun:ffi";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
+  DEFAULT_SHORTCUTS,
   normalizeStoredScene,
   type ExportImageResponse,
   type QuickSketchBootstrap,
   type QuickSketchRPC,
   type QuickSketchSettings,
+  type QuickSketchShortcuts,
   type StoredScene,
 } from "../shared/rpc.ts";
 
 const DEV_SERVER_PORT = 5174;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
-const TOGGLE_SHORTCUT = "Control+Shift+P";
-const COPY_AND_CLOSE_SHORTCUT = "Control+Shift+Enter";
 
 const appDataDir = Utils.paths.userData;
 const scenePath = join(appDataDir, "scene.json");
@@ -56,16 +57,24 @@ async function getMainViewUrl(): Promise<string> {
 
 function createDefaultSettings(): QuickSketchSettings {
   return {
-    showGrid: true,
+    showGrid: false,
     autoClearAfterCopyAndClose: true,
+    shortcuts: { ...DEFAULT_SHORTCUTS },
   };
 }
 
-function normalizeSettings(settings: QuickSketchSettings): QuickSketchSettings {
+function normalizeSettings(raw: any): QuickSketchSettings {
   const defaults = createDefaultSettings();
+  const s = raw && typeof raw === "object" ? raw : {};
+  const sc = s.shortcuts && typeof s.shortcuts === "object" ? s.shortcuts : {};
   return {
-    showGrid: settings.showGrid ?? defaults.showGrid,
-    autoClearAfterCopyAndClose: settings.autoClearAfterCopyAndClose ?? defaults.autoClearAfterCopyAndClose,
+    showGrid: typeof s.showGrid === "boolean" ? s.showGrid : defaults.showGrid,
+    autoClearAfterCopyAndClose:
+      typeof s.autoClearAfterCopyAndClose === "boolean" ? s.autoClearAfterCopyAndClose : defaults.autoClearAfterCopyAndClose,
+    shortcuts: {
+      toggleWindow: typeof sc.toggleWindow === "string" && sc.toggleWindow ? sc.toggleWindow : defaults.shortcuts.toggleWindow,
+      copyAndClose: typeof sc.copyAndClose === "string" && sc.copyAndClose ? sc.copyAndClose : defaults.shortcuts.copyAndClose,
+    },
   };
 }
 
@@ -83,14 +92,14 @@ const rpc = BrowserView.defineRPC<QuickSketchRPC>({
   maxRequestTime: 30000,
   handlers: {
     requests: {
-      getBootstrap: async (): Promise<QuickSketchBootstrap> => ({
-        scene: currentScene,
-        settings: currentSettings,
-        shortcuts: {
-          toggleWindow: TOGGLE_SHORTCUT,
-          copyAndClose: COPY_AND_CLOSE_SHORTCUT,
-        },
-      }),
+      getBootstrap: async (): Promise<QuickSketchBootstrap> => {
+        console.log(`[QuickSketch] getBootstrap called — shortcutsRegistered=${shortcutsRegistered}`);
+        return {
+          scene: currentScene,
+          settings: currentSettings,
+          shortcutsRegistered,
+        };
+      },
       persistScene: async ({ scene }: { scene: StoredScene }) => {
         currentScene = normalizeStoredScene(scene);
         await writeJson(scenePath, currentScene);
@@ -118,6 +127,20 @@ const rpc = BrowserView.defineRPC<QuickSketchRPC>({
       notify: async ({ title, body }: { title: string; body?: string }) => {
         Utils.showNotification({ title, body });
         return { ok: true as const };
+      },
+      openSystemPreferences: async () => {
+        Utils.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+        return { ok: true as const };
+      },
+      retryShortcuts: async () => {
+        const ok = registerShortcuts();
+        return { ok };
+      },
+      updateShortcuts: async ({ shortcuts }: { shortcuts: QuickSketchShortcuts }) => {
+        currentSettings = { ...currentSettings, shortcuts };
+        await writeJson(settingsPath, currentSettings);
+        const ok = registerShortcuts();
+        return { ok };
       },
     },
     messages: {},
@@ -173,6 +196,15 @@ function hideMainWindow() {
   if (!mainWindow.isMinimized?.()) {
     mainWindow.minimize();
   }
+
+  // After minimizing, the app remains frontmost on macOS, which means
+  // the global shortcut monitor (addGlobalMonitorForEventsMatchingMask)
+  // won't fire since it only captures events for other apps.
+  // Hide the app so macOS activates the previous application — equivalent
+  // to [NSApp hide:nil].
+  Bun.spawn(["osascript", "-e",
+    'tell application "System Events" to set visible of the first process whose frontmost is true to false',
+  ]);
 }
 
 async function requestExportPng(): Promise<ExportImageResponse> {
@@ -212,6 +244,7 @@ async function copyAndClose() {
 }
 
 function toggleWindow() {
+  console.log("[QuickSketch] toggleWindow() fired!");
   if (!mainWindow) {
     createWindow();
     return;
@@ -225,15 +258,98 @@ function toggleWindow() {
   hideMainWindow();
 }
 
-function registerShortcuts() {
-  GlobalShortcut.unregisterAll();
-  GlobalShortcut.register(TOGGLE_SHORTCUT, toggleWindow);
-  GlobalShortcut.register(COPY_AND_CLOSE_SHORTCUT, () => {
-    void copyAndClose();
-  });
+// Check macOS Accessibility permission via AXIsProcessTrusted()
+// Global shortcuts use NSEvent.addGlobalMonitorForEventsMatchingMask which
+// silently requires this permission — register() returns true either way,
+// but the monitor never fires without it.
+function isAccessibilityTrusted(): boolean {
+  try {
+    console.log("[QuickSketch] Checking AXIsProcessTrusted via FFI...");
+    const lib = dlopen(
+      "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices",
+      { AXIsProcessTrusted: { args: [], returns: FFIType.bool } },
+    );
+    const trusted = lib.symbols.AXIsProcessTrusted();
+    lib.close();
+    console.log(`[QuickSketch] AXIsProcessTrusted() = ${trusted}`);
+    return trusted;
+  } catch (err) {
+    console.error("[QuickSketch] Failed to call AXIsProcessTrusted:", err);
+    // If we can't check, assume trusted (non-macOS or unexpected error)
+    return true;
+  }
 }
 
+let shortcutsRegistered = false;
+
+function registerShortcuts(): boolean {
+  const { toggleWindow: toggleAccel, copyAndClose: copyAccel } = currentSettings.shortcuts;
+  console.log(`[QuickSketch] registerShortcuts: toggle="${toggleAccel}" copy="${copyAccel}"`);
+
+  GlobalShortcut.unregisterAll();
+
+  const toggleOk = GlobalShortcut.register(toggleAccel, toggleWindow);
+  console.log(`[QuickSketch] register("${toggleAccel}") → ${toggleOk}`);
+
+  const copyOk = GlobalShortcut.register(copyAccel, () => {
+    void copyAndClose();
+  });
+  console.log(`[QuickSketch] register("${copyAccel}") → ${copyOk}`);
+
+  const trusted = isAccessibilityTrusted();
+  shortcutsRegistered = toggleOk && copyOk && trusted;
+  console.log(`[QuickSketch] shortcutsRegistered=${shortcutsRegistered} (trusted=${trusted})`);
+  return shortcutsRegistered;
+}
+
+console.log("[QuickSketch] === Starting shortcut registration ===");
 registerShortcuts();
+console.log("[QuickSketch] === Shortcut registration complete ===");
+
+ApplicationMenu.setApplicationMenu([
+  {
+    label: "Quick Sketch",
+    submenu: [
+      { role: "about" },
+      { type: "divider" },
+      { label: "Settings...", action: "openSettings", accelerator: "Cmd+," },
+      { type: "divider" },
+      { role: "hide" },
+      { role: "hideOthers" },
+      { role: "unhideAll" },
+      { type: "divider" },
+      { role: "quit" },
+    ],
+  },
+  {
+    label: "Edit",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "divider" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "selectAll" },
+    ],
+  },
+  {
+    label: "Window",
+    submenu: [
+      { role: "minimize" },
+      { role: "zoom" },
+      { role: "close" },
+    ],
+  },
+]);
+
+ApplicationMenu.on("application-menu-clicked", (event: any) => {
+  if (event?.data?.action === "openSettings") {
+    if (mainWindow) {
+      mainWindow.webview.rpc.send.openSettings({});
+    }
+  }
+});
 
 if (sceneHasContent(currentScene)) {
   createWindow();

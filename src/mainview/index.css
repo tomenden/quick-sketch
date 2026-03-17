@@ -46,49 +46,10 @@ button {
   background: #fffdfa;
 }
 
-.titlebar {
+.utility-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 44px;
-  padding: 0 16px;
-  background: #fafafa;
-  border-bottom: 1px solid #e5e3df;
-}
-
-.titlebar-left,
-.titlebar-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.traffic-lights {
-  display: flex;
-  gap: 6px;
-}
-
-.traffic {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-}
-
-.traffic.red {
-  background: #ff5f57;
-}
-
-.traffic.yellow {
-  background: #febc2e;
-}
-
-.traffic.green {
-  background: #28c840;
-}
-
-.window-title {
-  font-size: 13px;
-  font-weight: 600;
+  gap: 8px;
 }
 
 .primary-button,
@@ -313,6 +274,31 @@ button {
   font-size: 11px;
 }
 
+.shortcut-badge {
+  padding: 4px 10px;
+  border: 1px solid #ece8e2;
+  border-radius: 6px;
+  background: #fbfaf8;
+  color: #1a1a1a;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 60px;
+  text-align: center;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.shortcut-badge:hover {
+  border-color: #d0cdc7;
+}
+
+.shortcut-badge.recording {
+  border-color: #4b87f0;
+  box-shadow: 0 0 0 2px rgba(75, 135, 240, 0.2);
+  color: #4b87f0;
+  font-size: 11px;
+}
+
 .about p {
   margin: 0 0 6px;
   color: #7a7a7a;
@@ -344,6 +330,85 @@ button {
 
 .toggle.on span {
   transform: translateX(14px);
+}
+
+.accessibility-warning {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fffdfa;
+}
+
+.warning-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 460px;
+  padding: 32px 36px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  text-align: center;
+}
+
+.warning-icon-circle {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 26px;
+  background: #fef3c7;
+}
+
+.warning-icon-circle svg {
+  width: 24px;
+  height: 24px;
+}
+
+.warning-card h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.warning-card p {
+  margin: 0;
+  color: #6b6b6b;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 380px;
+}
+
+.warning-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  border: 1px solid #e5e3df;
+  border-radius: 8px;
+  background: transparent;
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.warning-buttons .primary-button {
+  height: auto;
+  padding: 10px 20px;
+  font-size: 13px;
 }
 
 @media (max-width: 720px) {
