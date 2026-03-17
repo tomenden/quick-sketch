@@ -8,12 +8,12 @@
     "dev:hmr": "concurrently \"npm run hmr\" \"npm run dev\"",
     "hmr": "vite --port 5174",
     "build": "vite build && electrobun build",
-    "package": "yarn build && bash scripts/make-dmg.sh",
+    "package": "bun run build && bash scripts/make-dmg.sh",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.0",
-    "electrobun": "1.14.4",
+    "electrobun": "^1.14.4",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

@@ -18,25 +18,32 @@ Sketch a diagram, copy it to clipboard, paste anywhere. Toggle the window with a
 Install dependencies:
 
 ```bash
-yarn install
+bun install
 ```
 
 Run the native app in watch mode:
 
 ```bash
-yarn dev
+bun run dev
 ```
 
 Run with Vite HMR alongside the native shell:
 
 ```bash
-yarn dev:hmr
+bun run dev:hmr
 ```
 
 Build the app:
 
 ```bash
-yarn build
+bun run build
+```
+
+Package as `.dmg`:
+
+```bash
+bun run package
+# → build/Quick-Sketch-0.1.0.dmg
 ```
 
 ## Default shortcuts
