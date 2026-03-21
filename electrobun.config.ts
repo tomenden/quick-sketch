@@ -23,6 +23,12 @@ export default {
       bundleCEF: false,
     },
   },
+  scripts: {
+    postWrap: "scripts/adhoc-sign.ts",
+  },
+  release: {
+    generatePatch: false,
+  },
   runtime: {
     exitOnLastWindowClosed: false,
   },
