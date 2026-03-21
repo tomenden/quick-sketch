@@ -90,6 +90,7 @@ export type QuickSketchRPC = {
     messages: {
       clearScene: {};
       openSettings: {};
+      focusCanvas: {};
     };
   }>;
 };

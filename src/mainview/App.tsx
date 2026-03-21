@@ -18,12 +18,14 @@ type Bridge = {
   exportPng: () => Promise<ExportImageResponse>;
   clearScene: () => void;
   openSettings: () => void;
+  focusCanvas: () => void;
 };
 
 const bridge: Bridge = {
   exportPng: async () => ({ pngBase64: null, hasContent: false }),
   clearScene: () => undefined,
   openSettings: () => undefined,
+  focusCanvas: () => undefined,
 };
 
 const rpc = Electroview.defineRPC<QuickSketchRPC>({
@@ -38,6 +40,9 @@ const rpc = Electroview.defineRPC<QuickSketchRPC>({
       },
       openSettings: () => {
         bridge.openSettings();
+      },
+      focusCanvas: () => {
+        bridge.focusCanvas();
       },
     },
   },
@@ -238,6 +243,7 @@ export function App() {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const sceneRef = useRef<StoredScene | null>(null);
   const persistTimerRef = useRef<number | null>(null);
+  const handleCopyRef = useRef<(andClose: boolean) => void>(() => {});
 
   useEffect(() => {
     let cancelled = false;
@@ -260,6 +266,17 @@ export function App() {
     };
   }, []);
 
+  const settings = bootstrap?.settings ?? {
+    showGrid: false,
+    autoClearAfterCopyAndClose: true,
+    shortcuts: {
+      toggleWindow: "Control+Shift+S",
+      copyAndClose: "Control+Shift+C",
+    },
+  };
+
+  const shortcuts = settings.shortcuts;
+
   // Electrobun's GlobalShortcut uses NSEvent.addGlobalMonitorForEventsMatchingMask
   // which only fires when OTHER apps are focused. We need a local keydown listener
   // to handle shortcuts when our own window is focused.
@@ -271,24 +288,13 @@ export function App() {
       }
       if (keyEventMatchesAccelerator(e, shortcuts.copyAndClose)) {
         e.preventDefault();
-        void handleCopy(true);
+        void handleCopyRef.current(true);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  });
-
-  const settings = bootstrap?.settings ?? {
-    showGrid: false,
-    autoClearAfterCopyAndClose: true,
-    shortcuts: {
-      toggleWindow: "Control+Shift+S",
-      copyAndClose: "Control+Shift+C",
-    },
-  };
-
-  const shortcuts = settings.shortcuts;
+  }, [shortcuts.toggleWindow, shortcuts.copyAndClose]);
 
   const uiOptions = useMemo(
     () => ({
@@ -402,11 +408,19 @@ export function App() {
     }
   }
 
+  handleCopyRef.current = handleCopy;
+
   bridge.exportPng = exportCurrentScene;
   bridge.clearScene = () => {
     apiRef.current?.resetScene();
   };
   bridge.openSettings = () => setSettingsOpen(true);
+  bridge.focusCanvas = () => {
+    requestAnimationFrame(() => {
+      const container = document.querySelector<HTMLDivElement>(".excalidraw-container");
+      container?.focus();
+    });
+  };
 
   function updateShortcut(key: "toggleWindow" | "copyAndClose", accel: string) {
     const nextShortcuts = { ...shortcuts, [key]: accel };
@@ -425,6 +439,20 @@ export function App() {
       setShowAccessibilityWarning(false);
     }
   }
+
+  // Re-check accessibility when the window regains focus (e.g. after user
+  // grants permission in System Settings and switches back).
+  useEffect(() => {
+    if (!showAccessibilityWarning) return;
+
+    function onFocus() {
+      void handleRetryShortcuts();
+    }
+
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [showAccessibilityWarning]);
+
 
   if (!bootstrap) {
     return <div className="boot-screen">Loading Quick Sketch…</div>;
@@ -497,7 +525,12 @@ export function App() {
 
         <Excalidraw
           excalidrawAPI={(api) => {
-            apiRef.current = api;
+            if (!apiRef.current) {
+              apiRef.current = api;
+              bridge.focusCanvas();
+            } else {
+              apiRef.current = api;
+            }
           }}
           gridModeEnabled={settings.showGrid}
           initialData={

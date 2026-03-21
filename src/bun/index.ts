@@ -78,9 +78,6 @@ function normalizeSettings(raw: any): QuickSketchSettings {
   };
 }
 
-function sceneHasContent(scene: StoredScene | null): boolean {
-  return Boolean(scene && Array.isArray(scene.elements) && scene.elements.length > 0);
-}
 
 let currentScene = normalizeStoredScene(await readJson<StoredScene | null>(scenePath, null));
 let currentSettings = normalizeSettings(await readJson(settingsPath, createDefaultSettings()));
@@ -185,6 +182,7 @@ function showMainWindow(): MainWindow {
   }
 
   mainWindow.show();
+  mainWindow.webview.rpc.send.focusCanvas({});
   return mainWindow;
 }
 
@@ -245,17 +243,11 @@ async function copyAndClose() {
 
 function toggleWindow() {
   console.log("[QuickSketch] toggleWindow() fired!");
-  if (!mainWindow) {
-    createWindow();
-    return;
-  }
-
-  if (mainWindow.isMinimized?.()) {
-    showMainWindow();
-    return;
-  }
-
-  hideMainWindow();
+  // The global shortcut monitor (NSEvent.addGlobalMonitorForEventsMatchingMask)
+  // only fires when OTHER apps are focused. So if this fires, our window is
+  // never in front — always show it. Hiding is handled by the local keydown
+  // listener in the webview (which fires when our window IS focused).
+  showMainWindow();
 }
 
 // Check macOS Accessibility permission via AXIsProcessTrusted()
@@ -351,8 +343,4 @@ ApplicationMenu.on("application-menu-clicked", (event: any) => {
   }
 });
 
-if (sceneHasContent(currentScene)) {
-  createWindow();
-} else {
-  createWindow();
-}
+createWindow();
