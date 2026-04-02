@@ -12,37 +12,49 @@ if (!appPath) {
   process.exit(1);
 }
 
+// Developer ID Application certificate must be in the macOS Keychain.
+// Obtain from: developer.apple.com → Certificates, Identifiers & Profiles
 const IDENTITY = "Developer ID Application: Tom Enden (Q3VTL5U3XB)";
 const ENTITLEMENTS = join(import.meta.dir, "../App/entitlements.plist");
 
 function sign(target: string) {
   console.log(`Signing: ${target}`);
   execSync(
-    `codesign --force --options runtime --entitlements "${ENTITLEMENTS}" --sign "${IDENTITY}" "${target}"`,
+    `codesign --force --options runtime --timestamp --entitlements "${ENTITLEMENTS}" --sign "${IDENTITY}" "${target}"`,
     { stdio: "inherit" }
   );
 }
 
-const contentsDir = `${appPath}/Contents/MacOS`;
-
-// Sign dylibs first
-for (const entry of readdirSync(contentsDir)) {
-  if (extname(entry) === ".dylib") {
-    sign(join(contentsDir, entry));
+// Walk Contents/ recursively, signing all Mach-O binaries inside-out.
+// Skip Contents/Resources — those are JS/HTML assets, not native binaries.
+// Sign order: process children before parents so nested code is sealed first.
+function collectSignables(dir: string): string[] {
+  const results: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) {
+      if (full.includes("/Contents/Resources")) continue; // skip JS/HTML assets
+      results.push(...collectSignables(full));
+      // Sign bundle-like directories (.app, .framework, .xpc) after their contents
+      if (entry.endsWith(".app") || entry.endsWith(".framework") || entry.endsWith(".xpc")) {
+        results.push(full);
+      }
+    } else if (stat.isFile() && (extname(entry) === ".dylib" || (stat.mode & 0o111) !== 0)) {
+      results.push(full);
+    }
   }
+  return results;
 }
 
-// Sign executables (non-dylib files that are executable)
-for (const entry of readdirSync(contentsDir)) {
-  if (extname(entry) === ".dylib") continue;
-  const full = join(contentsDir, entry);
-  const stat = statSync(full);
-  if (stat.isFile() && (stat.mode & 0o111) !== 0) {
-    sign(full);
-  }
+const contentsDir = `${appPath}/Contents`;
+const signables = collectSignables(contentsDir);
+
+for (const target of signables) {
+  sign(target);
 }
 
-// Sign the bundle itself (must be last)
+// Sign the bundle itself last
 sign(appPath);
 
 console.log("Signing complete.");
