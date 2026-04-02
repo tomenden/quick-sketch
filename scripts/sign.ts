@@ -19,6 +19,12 @@ const ENTITLEMENTS = join(import.meta.dir, "../App/entitlements.plist");
 
 function sign(target: string) {
   console.log(`Signing: ${target}`);
+  // Remove linker-signed signatures first — codesign --force cannot replace them directly.
+  try {
+    execSync(`codesign --remove-signature "${target}"`, { stdio: "pipe" });
+  } catch {
+    // Not all targets have a signature to remove; ignore errors here.
+  }
   execSync(
     `codesign --force --options runtime --timestamp --entitlements "${ENTITLEMENTS}" --sign "${IDENTITY}" "${target}"`,
     { stdio: "inherit" }
