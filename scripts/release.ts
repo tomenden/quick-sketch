@@ -89,7 +89,13 @@ updateElectrobunConfigVersion(newVersion);
 
 // Build (runs sign.ts postWrap hook, produces DMG + tarball + update.json + patch)
 console.log("\n=== Building ===");
-run("bun run build");
+try {
+  run("bun run build");
+} catch (err) {
+  console.error("\nBuild failed — reverting version bump");
+  run("git checkout -- package.json electrobun.config.ts");
+  process.exit(1);
+}
 
 // Paths after build
 const dmgSrc = join(ARTIFACTS_DIR, "stable-macos-arm64-QuickSketch.dmg");
@@ -107,7 +113,7 @@ run(`cp "${dmgSrc}" "${dmgVersioned}"`);
 
 // Sign the DMG
 console.log("\n=== Signing DMG ===");
-run(`codesign --force --sign "${IDENTITY}" "${dmgVersioned}"`);
+run(`codesign --force --timestamp --sign "${IDENTITY}" "${dmgVersioned}"`);
 
 // Notarize
 console.log("\n=== Notarizing DMG (this takes 1-5 minutes) ===");
@@ -130,7 +136,7 @@ console.log("\n=== Tagging release ===");
 run(`git add package.json electrobun.config.ts`);
 run(`git commit -m "chore: release v${newVersion}"`);
 run(`git tag v${newVersion}`);
-run(`git push && git push --tags`);
+run(`git push --follow-tags`);
 
 // GitHub Release
 console.log("\n=== Creating GitHub Release ===");
