@@ -34,7 +34,7 @@ function collectSignables(dir: string): string[] {
     const full = join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) {
-      if (full.includes("/Contents/Resources")) continue; // skip JS/HTML assets
+      if (full === `${contentsDir}/Resources`) continue; // skip JS/HTML assets
       results.push(...collectSignables(full));
       // Sign bundle-like directories (.app, .framework, .xpc) after their contents
       if (entry.endsWith(".app") || entry.endsWith(".framework") || entry.endsWith(".xpc")) {
