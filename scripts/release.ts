@@ -77,7 +77,9 @@ const currentVersion: string = pkg.version;
 const newVersion = bumpVersion(currentVersion, bump);
 console.log(`\nBumping version: ${currentVersion} → ${newVersion}`);
 
-// Capture current hash BEFORE building — the patch file is named after it
+// Capture current hash BEFORE building — the patch file is named after it.
+// On the very first release: delete the artifacts/ directory first so prevHash
+// starts empty and no stale patch from a pre-release build is uploaded.
 const updateJsonPath = join(ARTIFACTS_DIR, "stable-macos-arm64-update.json");
 const prevHash: string = existsSync(updateJsonPath)
   ? JSON.parse(readFileSync(updateJsonPath, "utf8")).hash ?? ""
