@@ -298,49 +298,92 @@ console.log("[QuickSketch] === Starting shortcut registration ===");
 registerShortcuts();
 console.log("[QuickSketch] === Shortcut registration complete ===");
 
-ApplicationMenu.setApplicationMenu([
-  {
-    label: "Quick Sketch",
-    submenu: [
-      { role: "about" },
-      { type: "divider" },
-      { label: "Settings...", action: "openSettings", accelerator: "Cmd+," },
-      { type: "divider" },
-      { role: "hide" },
-      { role: "hideOthers" },
-      { role: "unhideAll" },
-      { type: "divider" },
-      { role: "quit" },
-    ],
-  },
-  {
-    label: "Edit",
-    submenu: [
-      { role: "undo" },
-      { role: "redo" },
-      { type: "divider" },
-      { role: "cut" },
-      { role: "copy" },
-      { role: "paste" },
-      { role: "selectAll" },
-    ],
-  },
-  {
-    label: "Window",
-    submenu: [
-      { role: "minimize" },
-      { role: "zoom" },
-      { role: "close" },
-    ],
-  },
-]);
+let updateReady = false;
+
+function buildMenu() {
+  const quickSketchSubmenu: any[] = [
+    { role: "about" },
+    { type: "divider" },
+    { label: "Settings...", action: "openSettings", accelerator: "Cmd+," },
+  ];
+
+  if (updateReady) {
+    quickSketchSubmenu.push({ type: "divider" });
+    quickSketchSubmenu.push({ label: "Restart to Update", action: "restartToUpdate" });
+  }
+
+  quickSketchSubmenu.push(
+    { type: "divider" },
+    { role: "hide" },
+    { role: "hideOthers" },
+    { role: "unhideAll" },
+    { type: "divider" },
+    { role: "quit" },
+  );
+
+  ApplicationMenu.setApplicationMenu([
+    {
+      label: "Quick Sketch",
+      submenu: quickSketchSubmenu,
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "divider" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [
+        { role: "minimize" },
+        { role: "zoom" },
+        { role: "close" },
+      ],
+    },
+  ]);
+}
+
+async function checkAndApplyUpdate() {
+  const channel = await Updater.localInfo.channel();
+  if (channel === "dev") return;
+
+  try {
+    const info = await Updater.checkForUpdate();
+    if (!info.updateAvailable) return;
+
+    console.log(`[QuickSketch] Update available: ${info.version}`);
+
+    await Updater.downloadUpdate();
+
+    console.log("[QuickSketch] Update downloaded, ready to apply");
+    updateReady = true;
+    buildMenu();
+    Utils.showNotification({
+      title: "Quick Sketch",
+      body: `v${info.version} downloaded. Use Quick Sketch → Restart to Update.`,
+    });
+  } catch (err) {
+    console.error("[QuickSketch] Update check failed:", err);
+  }
+}
+
+buildMenu();
 
 ApplicationMenu.on("application-menu-clicked", (event: any) => {
   if (event?.data?.action === "openSettings") {
     if (mainWindow) {
       mainWindow.webview.rpc.send.openSettings({});
     }
+  } else if (event?.data?.action === "restartToUpdate") {
+    void Updater.applyUpdate();
   }
 });
 
 createWindow();
+void checkAndApplyUpdate();
