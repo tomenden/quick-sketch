@@ -27,7 +27,8 @@ export default {
     postWrap: "scripts/sign.ts",
   },
   release: {
-    generatePatch: false,
+    generatePatch: true,
+    baseUrl: "https://github.com/tomenden/quick-sketch/releases/latest/download",
   },
   runtime: {
     exitOnLastWindowClosed: false,
