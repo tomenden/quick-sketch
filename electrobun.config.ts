@@ -24,7 +24,7 @@ export default {
     },
   },
   scripts: {
-    postWrap: "scripts/adhoc-sign.ts",
+    postWrap: "scripts/sign.ts",
   },
   release: {
     generatePatch: false,
