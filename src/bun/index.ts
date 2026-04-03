@@ -13,6 +13,15 @@ import {
   type StoredScene,
 } from "../shared/rpc.ts";
 
+const MENU_ACTION = {
+  openSettings: "openSettings",
+  restartToUpdate: "restartToUpdate",
+} as const;
+
+function pngBase64ToBytes(pngBase64: string): Uint8Array {
+  return Uint8Array.from(Buffer.from(pngBase64.replace(/^data:image\/png;base64,/, ""), "base64"));
+}
+
 const DEV_SERVER_PORT = 5174;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
@@ -109,8 +118,7 @@ const rpc = BrowserView.defineRPC<QuickSketchRPC>({
       },
       writeClipboardImage: async ({ pngBase64 }: { pngBase64: string }) => {
         try {
-          const normalized = pngBase64.replace(/^data:image\/png;base64,/, "");
-          const bytes = Uint8Array.from(Buffer.from(normalized, "base64"));
+          const bytes = pngBase64ToBytes(pngBase64);
           Utils.clipboardWriteImage(bytes);
           return { ok: true };
         } catch {
@@ -228,9 +236,7 @@ async function copyAndClose() {
     return;
   }
 
-  const normalized = result.pngBase64.replace(/^data:image\/png;base64,/, "");
-  const bytes = Uint8Array.from(Buffer.from(normalized, "base64"));
-  Utils.clipboardWriteImage(bytes);
+  Utils.clipboardWriteImage(pngBase64ToBytes(result.pngBase64));
 
   if (currentSettings.autoClearAfterCopyAndClose) {
     currentScene = null;
@@ -298,49 +304,92 @@ console.log("[QuickSketch] === Starting shortcut registration ===");
 registerShortcuts();
 console.log("[QuickSketch] === Shortcut registration complete ===");
 
-ApplicationMenu.setApplicationMenu([
-  {
-    label: "Quick Sketch",
-    submenu: [
-      { role: "about" },
-      { type: "divider" },
-      { label: "Settings...", action: "openSettings", accelerator: "Cmd+," },
-      { type: "divider" },
-      { role: "hide" },
-      { role: "hideOthers" },
-      { role: "unhideAll" },
-      { type: "divider" },
-      { role: "quit" },
-    ],
-  },
-  {
-    label: "Edit",
-    submenu: [
-      { role: "undo" },
-      { role: "redo" },
-      { type: "divider" },
-      { role: "cut" },
-      { role: "copy" },
-      { role: "paste" },
-      { role: "selectAll" },
-    ],
-  },
-  {
-    label: "Window",
-    submenu: [
-      { role: "minimize" },
-      { role: "zoom" },
-      { role: "close" },
-    ],
-  },
-]);
+let updateReady = false;
+
+function buildMenu(withUpdate = updateReady) {
+  const quickSketchSubmenu: any[] = [
+    { role: "about" },
+    { type: "divider" },
+    { label: "Settings...", action: MENU_ACTION.openSettings, accelerator: "Cmd+," },
+  ];
+
+  if (withUpdate) {
+    quickSketchSubmenu.push({ type: "divider" });
+    quickSketchSubmenu.push({ label: "Restart to Update", action: MENU_ACTION.restartToUpdate });
+  }
+
+  quickSketchSubmenu.push(
+    { type: "divider" },
+    { role: "hide" },
+    { role: "hideOthers" },
+    { role: "unhideAll" },
+    { type: "divider" },
+    { role: "quit" },
+  );
+
+  ApplicationMenu.setApplicationMenu([
+    {
+      label: "Quick Sketch",
+      submenu: quickSketchSubmenu,
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "divider" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [
+        { role: "minimize" },
+        { role: "zoom" },
+        { role: "close" },
+      ],
+    },
+  ]);
+}
+
+async function checkAndApplyUpdate() {
+  const channel = await Updater.localInfo.channel();
+  if (channel === "dev") return;
+
+  try {
+    const info = await Updater.checkForUpdate();
+    if (!info.updateAvailable) return;
+
+    console.log(`[QuickSketch] Update available: ${info.version}`);
+
+    await Updater.downloadUpdate();
+
+    console.log("[QuickSketch] Update downloaded, ready to apply");
+    updateReady = true;
+    buildMenu(true);
+    Utils.showNotification({
+      title: "Quick Sketch",
+      body: `v${info.version} downloaded. Use Quick Sketch → Restart to Update.`,
+    });
+  } catch (err) {
+    console.error("[QuickSketch] Update check failed:", err);
+  }
+}
+
+buildMenu();
 
 ApplicationMenu.on("application-menu-clicked", (event: any) => {
-  if (event?.data?.action === "openSettings") {
+  if (event?.data?.action === MENU_ACTION.openSettings) {
     if (mainWindow) {
       mainWindow.webview.rpc.send.openSettings({});
     }
+  } else if (event?.data?.action === MENU_ACTION.restartToUpdate) {
+    void Updater.applyUpdate();
   }
 });
 
 createWindow();
+void checkAndApplyUpdate();

@@ -14,6 +14,13 @@ export default {
     mac: {
       bundleCEF: false,
       icons: "App/QuickSketch.iconset",
+      codesign: true,
+      // Bun runtime requires these entitlements under hardened runtime.
+      entitlements: {
+        "com.apple.security.cs.allow-jit": true,
+        "com.apple.security.cs.disable-library-validation": true,
+        "com.apple.security.cs.allow-unsigned-executable-memory": true,
+      },
     },
     linux: {
       bundleCEF: false,
@@ -23,11 +30,9 @@ export default {
       bundleCEF: false,
     },
   },
-  scripts: {
-    postWrap: "scripts/adhoc-sign.ts",
-  },
   release: {
-    generatePatch: false,
+    generatePatch: true,
+    baseUrl: "https://github.com/tomenden/quick-sketch/releases/latest/download",
   },
   runtime: {
     exitOnLastWindowClosed: false,

@@ -22,10 +22,41 @@ declare module "electrobun/bun" {
     unregisterAll(): void;
   };
 
+  export type UpdateStatusType =
+    | "idle" | "checking" | "check-complete" | "no-update" | "update-available"
+    | "downloading" | "download-starting" | "downloading-patch" | "applying-patch"
+    | "patch-applied" | "patch-failed" | "downloading-full-bundle" | "download-progress"
+    | "decompressing" | "download-complete" | "applying" | "extracting"
+    | "replacing-app" | "launching-new-version" | "complete" | "error";
+
+  export interface UpdateStatusEntry {
+    status: UpdateStatusType;
+    message: string;
+    timestamp: number;
+    details?: {
+      currentHash?: string;
+      latestHash?: string;
+      progress?: number;
+      bytesDownloaded?: number;
+      totalBytes?: number;
+      errorMessage?: string;
+    };
+  }
+
   export const Updater: {
     localInfo: {
       channel(): Promise<string>;
     };
+    checkForUpdate(): Promise<{
+      version: string;
+      hash: string;
+      updateAvailable: boolean;
+      updateReady: boolean;
+      error: string;
+    }>;
+    downloadUpdate(): Promise<void>;
+    applyUpdate(): Promise<void>;
+    onStatusChange(callback: ((entry: UpdateStatusEntry) => void) | null): void;
   };
 
   export const Utils: {
