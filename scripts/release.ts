@@ -40,11 +40,9 @@ function bumpVersion(current: string, bump: string): string {
   return `${major}.${minor}.${patch + 1}`;
 }
 
-function updatePackageJsonVersion(version: string) {
-  const pkgPath = join(ROOT, "package.json");
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+function updatePackageJsonVersion(pkg: Record<string, unknown>, version: string) {
   pkg.version = version;
-  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  writeFileSync(join(ROOT, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
 }
 
 function updateElectrobunConfigVersion(version: string) {
@@ -69,7 +67,12 @@ if (!["patch", "minor", "major"].includes(bump)) {
   process.exit(1);
 }
 
-// Guard: clean working tree
+// Guard: must be on master with a clean working tree
+const branch = runCapture("git rev-parse --abbrev-ref HEAD");
+if (branch !== "master") {
+  console.error(`Must release from master (current branch: ${branch})`);
+  process.exit(1);
+}
 const status = runCapture("git status --porcelain");
 if (status) {
   console.error("Working tree is not clean. Commit or stash changes first.");
@@ -91,10 +94,10 @@ const prevHash: string = existsSync(updateJsonPath)
   : "";
 
 // Bump versions
-updatePackageJsonVersion(newVersion);
+updatePackageJsonVersion(pkg, newVersion);
 updateElectrobunConfigVersion(newVersion);
 
-// Build (runs sign.ts postWrap hook, produces DMG + tarball + update.json + patch)
+// Build — Electrobun signs inner + outer bundles, produces DMG + tarball + update.json + patch
 console.log("\n=== Building ===");
 try {
   run("bun run build");

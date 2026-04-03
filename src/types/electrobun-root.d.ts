@@ -5,6 +5,6 @@ declare module "electrobun" {
     build?: unknown;
     runtime?: unknown;
     scripts?: unknown;
-    release?: unknown;
+    release?: { generatePatch?: boolean; baseUrl?: string };
   };
 }
