@@ -4,7 +4,7 @@ export default {
   app: {
     name: "Quick Sketch",
     identifier: "dev.tome.quick-sketch",
-    version: "0.1.0",
+    version: "0.0.9",
   },
   build: {
     copy: {
