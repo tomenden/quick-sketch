@@ -24,11 +24,11 @@ const HOMEBREW_TAP_DIR = join(ROOT, "../homebrew-tap");
 
 function run(cmd: string, opts: { cwd?: string } = {}) {
   console.log(`\n$ ${cmd}`);
-  execSync(cmd, { stdio: "inherit", cwd: opts.cwd ?? ROOT });
+  execSync(cmd, { stdio: "inherit", cwd: opts.cwd ?? ROOT, env: process.env });
 }
 
 function runCapture(cmd: string, opts: { cwd?: string } = {}): string {
-  return execSync(cmd, { cwd: opts.cwd ?? ROOT }).toString().trim();
+  return execSync(cmd, { cwd: opts.cwd ?? ROOT, env: process.env }).toString().trim();
 }
 
 // --- Version bump ---
