@@ -14,6 +14,13 @@ export default {
     mac: {
       bundleCEF: false,
       icons: "App/QuickSketch.iconset",
+      codesign: true,
+      // Bun runtime requires these entitlements under hardened runtime.
+      entitlements: {
+        "com.apple.security.cs.allow-jit": true,
+        "com.apple.security.cs.disable-library-validation": true,
+        "com.apple.security.cs.allow-unsigned-executable-memory": true,
+      },
     },
     linux: {
       bundleCEF: false,
@@ -22,9 +29,6 @@ export default {
     win: {
       bundleCEF: false,
     },
-  },
-  scripts: {
-    postWrap: "scripts/sign.ts",
   },
   release: {
     generatePatch: true,

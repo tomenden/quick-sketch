@@ -12,7 +12,12 @@ import { createHash } from "node:crypto";
 const ROOT = join(import.meta.dir, "..");
 const ARTIFACTS_DIR = join(ROOT, "artifacts");
 const IDENTITY = "Developer ID Application: Tom Enden (Q3VTL5U3XB)";
+const TEAM_ID = "Q3VTL5U3XB";
 const NOTARY_PROFILE = "quick-sketch-notary";
+
+// Electrobun's native codesign pass reads these env vars.
+process.env.ELECTROBUN_DEVELOPER_ID = IDENTITY;
+process.env.ELECTROBUN_TEAMID = TEAM_ID;
 const GITHUB_REPO = "tomenden/quick-sketch";
 const CASK_PATH = join(ROOT, "../homebrew-tap/Casks/quick-sketch.rb");
 const HOMEBREW_TAP_DIR = join(ROOT, "../homebrew-tap");
