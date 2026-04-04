@@ -240,6 +240,7 @@ export function App() {
   const [copying, setCopying] = useState(false);
   const [scenePresent, setScenePresent] = useState(false);
   const [showAccessibilityWarning, setShowAccessibilityWarning] = useState(false);
+  const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const sceneRef = useRef<StoredScene | null>(null);
   const persistTimerRef = useRef<number | null>(null);
@@ -256,6 +257,7 @@ export function App() {
       sceneRef.current = nextBootstrap.scene;
       setScenePresent(sceneHasContent(nextBootstrap.scene));
       setBootstrap(nextBootstrap);
+      setLaunchAtLogin(nextBootstrap.launchAtLogin);
       if (!nextBootstrap.shortcutsRegistered) {
         setShowAccessibilityWarning(true);
       }
@@ -577,6 +579,16 @@ export function App() {
 
           <div className="settings-group">
             <h3>Behavior</h3>
+            <div className="settings-row">
+              <span>Launch at login</span>
+              <Toggle
+                checked={launchAtLogin}
+                onChange={(value) => {
+                  setLaunchAtLogin(value);
+                  void electrobun.rpc.request.setLoginItemEnabled({ enabled: value });
+                }}
+              />
+            </div>
             <div className="settings-row">
               <span>Auto-clear after copy and close</span>
               <Toggle

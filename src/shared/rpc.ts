@@ -31,6 +31,7 @@ export type QuickSketchBootstrap = {
   scene: StoredScene | null;
   settings: QuickSketchSettings;
   shortcutsRegistered: boolean;
+  launchAtLogin: boolean;
 };
 
 export type ExportImageResponse = {
@@ -75,6 +76,10 @@ export type QuickSketchRPC = {
       };
       updateShortcuts: {
         params: { shortcuts: QuickSketchShortcuts };
+        response: { ok: boolean };
+      };
+      setLoginItemEnabled: {
+        params: { enabled: boolean };
         response: { ok: boolean };
       };
     };
