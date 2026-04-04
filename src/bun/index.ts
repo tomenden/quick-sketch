@@ -1,6 +1,6 @@
 import { ApplicationMenu, BrowserView, BrowserWindow, GlobalShortcut, Updater, Utils } from "electrobun/bun";
 import { dlopen, FFIType } from "bun:ffi";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
   DEFAULT_SHORTCUTS,
@@ -24,6 +24,58 @@ function pngBase64ToBytes(pngBase64: string): Uint8Array {
 
 const DEV_SERVER_PORT = 5174;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+
+// --- Login item (launch at login) ---
+// Implemented via a LaunchAgent plist — no extra permissions required.
+const LAUNCH_AGENT_ID = "dev.tome.quick-sketch";
+const launchAgentPlistPath = join(
+  process.env.HOME ?? "",
+  "Library", "LaunchAgents", `${LAUNCH_AGENT_ID}.plist`,
+);
+
+// Walk up from process.execPath to find the .app bundle.
+// Returns null in dev mode where no .app bundle exists.
+function getAppBundlePath(): string | null {
+  let dir = join(process.execPath);
+  while (dir !== join(dir, "..")) {
+    if (dir.endsWith(".app")) return dir;
+    dir = join(dir, "..");
+  }
+  return null;
+}
+
+function isLoginItemEnabled(): boolean {
+  return existsSync(launchAgentPlistPath);
+}
+
+async function setLoginItemEnabled(enabled: boolean): Promise<boolean> {
+  if (enabled) {
+    const bundlePath = getAppBundlePath();
+    if (!bundlePath) return false;
+    const launcherPath = join(bundlePath, "Contents", "MacOS", "launcher");
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>Label</key>
+\t<string>${LAUNCH_AGENT_ID}</string>
+\t<key>ProgramArguments</key>
+\t<array>
+\t\t<string>${launcherPath}</string>
+\t</array>
+\t<key>RunAtLoad</key>
+\t<true/>
+</dict>
+</plist>
+`;
+    await Bun.write(launchAgentPlistPath, plist);
+  } else {
+    if (existsSync(launchAgentPlistPath)) {
+      unlinkSync(launchAgentPlistPath);
+    }
+  }
+  return true;
+}
 
 const appDataDir = Utils.paths.userData;
 const scenePath = join(appDataDir, "scene.json");
@@ -104,6 +156,7 @@ const rpc = BrowserView.defineRPC<QuickSketchRPC>({
           scene: currentScene,
           settings: currentSettings,
           shortcutsRegistered,
+          launchAtLogin: isLoginItemEnabled(),
         };
       },
       persistScene: async ({ scene }: { scene: StoredScene }) => {
@@ -145,6 +198,10 @@ const rpc = BrowserView.defineRPC<QuickSketchRPC>({
         currentSettings = { ...currentSettings, shortcuts };
         await writeJson(settingsPath, currentSettings);
         const ok = registerShortcuts();
+        return { ok };
+      },
+      setLoginItemEnabled: async ({ enabled }: { enabled: boolean }) => {
+        const ok = await setLoginItemEnabled(enabled);
         return { ok };
       },
     },
